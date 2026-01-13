@@ -1,5 +1,4 @@
-﻿
-using BankSystem.Domain.Entities;
+﻿using BankSystem.Domain.Entities;
 
 namespace BankSystem.Domain.Interfaces
 {
@@ -7,6 +6,7 @@ namespace BankSystem.Domain.Interfaces
     {
         Task<Customer?> GetByEmailAsync(string email);
         Task<Customer?> GetByIdentificationNumberAsync(string identificationNumber);
-        Task<Customer?> GetWithAccountsAsync(Guid customerId);
+        Task<bool> EmailExistsAsync(string email);
+        Task<Customer?> GetWithAccountsAsync(Guid id);
     }
 }

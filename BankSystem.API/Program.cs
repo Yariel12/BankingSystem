@@ -1,7 +1,11 @@
-using BankSystem.Domain.Interfaces;
+﻿using BankSystem.Domain.Interfaces;
 using BankSystem.Infrastructure.Data;
 using BankSystem.Infrastructure.Repositories;
+using BankSystem.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,9 +31,34 @@ builder.Services.AddDbContext<BankDbContext>(options =>
 // Registrar UnitOfWork
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-// Registrar MediatR
+builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
+builder.Services.AddScoped<IAccountRepository, AccountRepository>();
+builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
+
+// Registrar JWT Service
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+// Registrar MediatR - CAMBIO AQUÍ ⭐
 builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssembly(typeof(BankSystem.Application.Commands.CreateCustomerCommand).Assembly));
+    cfg.RegisterServicesFromAssembly(typeof(BankSystem.Application.Commands.LoginCommand).Assembly));
+
+// Configurar JWT Authentication ⭐ NUEVO
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
 
 // Configurar CORS
 builder.Services.AddCors(options =>
@@ -55,9 +84,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseCors("AllowAll");
 
+// ⭐ IMPORTANTE: Authentication ANTES de Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

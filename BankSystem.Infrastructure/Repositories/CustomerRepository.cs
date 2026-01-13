@@ -13,20 +13,26 @@ public class CustomerRepository : GenericRepository<Customer>, ICustomerReposito
 
     public async Task<Customer?> GetByEmailAsync(string email)
     {
-        return await _dbSet
+        return await _context.Customers
             .FirstOrDefaultAsync(c => c.Email == email);
     }
 
     public async Task<Customer?> GetByIdentificationNumberAsync(string identificationNumber)
     {
-        return await _dbSet
+        return await _context.Customers
             .FirstOrDefaultAsync(c => c.IdentificationNumber == identificationNumber);
     }
 
-    public async Task<Customer?> GetWithAccountsAsync(Guid customerId)
+    public async Task<bool> EmailExistsAsync(string email)
     {
-        return await _dbSet
+        return await _context.Customers
+            .AnyAsync(c => c.Email == email);
+    }
+
+    public async Task<Customer?> GetWithAccountsAsync(Guid id)
+    {
+        return await _context.Customers
             .Include(c => c.Accounts)
-            .FirstOrDefaultAsync(c => c.Id == customerId);
+            .FirstOrDefaultAsync(c => c.Id == id);
     }
 }

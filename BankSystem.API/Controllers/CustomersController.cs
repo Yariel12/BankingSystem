@@ -1,11 +1,12 @@
 ﻿using BankSystem.Application.Commands;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BankSystem.API.Controllers;
 
-
-// Controller Customer
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class CustomersController : ControllerBase
@@ -17,7 +18,7 @@ public class CustomersController : ControllerBase
         _mediator = mediator;
     }
 
-
+    // Solo admins deberían ver TODOS los customers (por ahora lo dejamos protegido)
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -33,12 +34,17 @@ public class CustomersController : ControllerBase
         }
     }
 
-
+    // Solo puedes ver tu propio perfil o cualquier customer (validación por ID)
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {
         try
         {
+            var authenticatedCustomerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            if (id != authenticatedCustomerId)
+                return Forbid(); // 403 - No tienes permiso
+
             var query = new GetCustomerByIdQuery { CustomerId = id };
             var customer = await _mediator.Send(query);
 
@@ -53,32 +59,58 @@ public class CustomersController : ControllerBase
         }
     }
 
-
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateCustomerCommand command)
-    {
-        try
-        {
-            var customer = await _mediator.Send(command);
-            return CreatedAtAction(nameof(GetById), new { id = customer.Id }, customer);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Error al crear el cliente", error = ex.Message });
-        }
-    }
-
-
+    // Solo puedes ver TUS cuentas
     [HttpGet("{id}/accounts")]
     public async Task<IActionResult> GetAccounts(Guid id)
     {
         try
         {
+            var authenticatedCustomerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            if (id != authenticatedCustomerId)
+                return Forbid(); // 403 - No puedes ver cuentas de otros
+
             var query = new GetAccountsByCustomerIdQuery { CustomerId = id };
+            var accounts = await _mediator.Send(query);
+            return Ok(accounts);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al obtener las cuentas", error = ex.Message });
+        }
+    }
+
+    // Ver MI perfil (más práctico)
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMyProfile()
+    {
+        try
+        {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            var query = new GetCustomerByIdQuery { CustomerId = customerId };
+            var customer = await _mediator.Send(query);
+
+            if (customer == null)
+                return NotFound(new { message = "Cliente no encontrado" });
+
+            return Ok(customer);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error al obtener el perfil", error = ex.Message });
+        }
+    }
+
+    // Ver MIS cuentas (más práctico)
+    [HttpGet("me/accounts")]
+    public async Task<IActionResult> GetMyAccounts()
+    {
+        try
+        {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            var query = new GetAccountsByCustomerIdQuery { CustomerId = customerId };
             var accounts = await _mediator.Send(query);
             return Ok(accounts);
         }

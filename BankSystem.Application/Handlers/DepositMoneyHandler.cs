@@ -3,6 +3,8 @@ using BankSystem.Application.DTOs;
 using BankSystem.Domain.Interfaces;
 using MediatR;
 
+namespace BankSystem.Application.Handlers;
+
 public class DepositMoneyHandler : IRequestHandler<DepositMoneyCommand, TransactionDto>
 {
     private readonly IUnitOfWork _unitOfWork;
@@ -12,16 +14,25 @@ public class DepositMoneyHandler : IRequestHandler<DepositMoneyCommand, Transact
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<TransactionDto> Handle(DepositMoneyCommand request, CancellationToken cancellationToken)
+    public async Task<TransactionDto> Handle(
+        DepositMoneyCommand request,
+        CancellationToken cancellationToken)
     {
         var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+
         if (account == null)
             throw new InvalidOperationException("La cuenta no existe");
 
+        if (account.CustomerId != request.RequestingCustomerId)
+            throw new UnauthorizedAccessException("No tienes permiso para realizar esta operación");
+
         account.Deposit(request.Amount, request.Description);
+
         await _unitOfWork.SaveChangesAsync();
 
-        var transaction = account.Transactions.Last();
+        var transaction = account.Transactions
+            .OrderByDescending(t => t.CreatedAt)
+            .First();
 
         return new TransactionDto
         {

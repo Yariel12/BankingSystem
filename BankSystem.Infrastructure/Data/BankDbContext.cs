@@ -18,26 +18,13 @@ public class BankDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Aplicar todas las configuraciones
         modelBuilder.ApplyConfiguration(new CustomerConfiguration());
         modelBuilder.ApplyConfiguration(new AccountConfiguration());
         modelBuilder.ApplyConfiguration(new TransactionConfiguration());
-
-        // O puedes aplicar todas las configuraciones de un assembly
-        // modelBuilder.ApplyConfigurationsFromAssembly(typeof(BankDbContext).Assembly);
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-
-        foreach (var entry in ChangeTracker.Entries<Domain.Common.BaseEntity>())
-        {
-            if (entry.State == EntityState.Modified)
-            {
-                entry.Property("UpdatedAt").CurrentValue = DateTime.UtcNow;
-            }
-        }
-
         return base.SaveChangesAsync(cancellationToken);
     }
 }

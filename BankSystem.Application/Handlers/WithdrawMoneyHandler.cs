@@ -1,7 +1,7 @@
 ﻿using BankSystem.Application.Commands;
 using BankSystem.Application.DTOs;
-using MediatR;
 using BankSystem.Domain.Interfaces;
+using MediatR;
 
 public class WithdrawMoneyHandler : IRequestHandler<WithdrawMoneyCommand, TransactionDto>
 {
@@ -15,10 +15,15 @@ public class WithdrawMoneyHandler : IRequestHandler<WithdrawMoneyCommand, Transa
     public async Task<TransactionDto> Handle(WithdrawMoneyCommand request, CancellationToken cancellationToken)
     {
         var account = await _unitOfWork.Accounts.GetByIdAsync(request.AccountId);
+
         if (account == null)
             throw new InvalidOperationException("La cuenta no existe");
 
+        if (account.CustomerId != request.RequestingCustomerId)
+            throw new UnauthorizedAccessException("No tienes permiso para realizar esta operación");
+
         account.Withdraw(request.Amount, request.Description);
+
         await _unitOfWork.SaveChangesAsync();
 
         var transaction = account.Transactions.Last();

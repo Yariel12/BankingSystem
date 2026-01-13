@@ -1,9 +1,12 @@
 ﻿using BankSystem.Application.Commands;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace BankSystem.API.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class AccountsController : ControllerBase
@@ -15,7 +18,7 @@ public class AccountsController : ControllerBase
         _mediator = mediator;
     }
 
-
+    // Solo puedes ver cuentas que te pertenecen
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -27,6 +30,11 @@ public class AccountsController : ControllerBase
             if (account == null)
                 return NotFound(new { message = "Cuenta no encontrada" });
 
+            // Validar que la cuenta pertenece al customer autenticado
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            if (account.CustomerId != customerId)
+                return Forbid();
+
             return Ok(account);
         }
         catch (Exception ex)
@@ -35,7 +43,7 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // Buscar por número de cuenta (útil para transferencias)
     [HttpGet("number/{accountNumber}")]
     public async Task<IActionResult> GetByNumber(string accountNumber)
     {
@@ -47,6 +55,10 @@ public class AccountsController : ControllerBase
             if (account == null)
                 return NotFound(new { message = "Cuenta no encontrada" });
 
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            if (account.CustomerId != customerId)
+                return Forbid();
+
             return Ok(account);
         }
         catch (Exception ex)
@@ -55,12 +67,17 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // Crear cuenta - debe ser para el customer autenticado
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateAccountCommand command)
     {
         try
         {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+            if (command.CustomerId != customerId)
+                return Forbid();
+
             var account = await _mediator.Send(command);
             return CreatedAtAction(nameof(GetById), new { id = account.Id }, account);
         }
@@ -74,21 +91,28 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // ✅ DEPOSITAR - Optimizado (sin doble carga)
     [HttpPost("{id}/deposit")]
     public async Task<IActionResult> Deposit(Guid id, [FromBody] DepositRequest request)
     {
         try
         {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
             var command = new DepositMoneyCommand
             {
                 AccountId = id,
                 Amount = request.Amount,
-                Description = request.Description ?? "Depósito"
+                Description = request.Description ?? "Depósito",
+                RequestingCustomerId = customerId // ← Ahora el handler valida esto
             };
 
             var transaction = await _mediator.Send(command);
             return Ok(transaction);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
         }
         catch (InvalidOperationException ex)
         {
@@ -100,21 +124,28 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // ✅ RETIRAR - Optimizado (sin doble carga)
     [HttpPost("{id}/withdraw")]
     public async Task<IActionResult> Withdraw(Guid id, [FromBody] WithdrawRequest request)
     {
         try
         {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
             var command = new WithdrawMoneyCommand
             {
                 AccountId = id,
                 Amount = request.Amount,
-                Description = request.Description ?? "Retiro"
+                Description = request.Description ?? "Retiro",
+                RequestingCustomerId = customerId // ← Ahora el handler valida esto
             };
 
             var transaction = await _mediator.Send(command);
             return Ok(transaction);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
         }
         catch (InvalidOperationException ex)
         {
@@ -126,22 +157,29 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // ✅ TRANSFERIR - Optimizado (sin doble carga)
     [HttpPost("{id}/transfer")]
     public async Task<IActionResult> Transfer(Guid id, [FromBody] TransferRequest request)
     {
         try
         {
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
             var command = new TransferMoneyCommand
             {
                 SourceAccountId = id,
                 DestinationAccountNumber = request.DestinationAccountNumber,
                 Amount = request.Amount,
-                Description = request.Description ?? "Transferencia"
+                Description = request.Description ?? "Transferencia",
+                RequestingCustomerId = customerId // ← Ahora el handler valida esto
             };
 
             var transaction = await _mediator.Send(command);
             return Ok(transaction);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
         }
         catch (InvalidOperationException ex)
         {
@@ -153,20 +191,30 @@ public class AccountsController : ControllerBase
         }
     }
 
-
+    // Ver transacciones - solo de TUS cuentas
     [HttpGet("{id}/transactions")]
     public async Task<IActionResult> GetTransactions(Guid id, [FromQuery] DateTime? startDate, [FromQuery] DateTime? endDate)
     {
         try
         {
-            var query = new GetTransactionHistoryQuery
+            var query = new GetAccountByIdQuery { AccountId = id };
+            var account = await _mediator.Send(query);
+
+            if (account == null)
+                return NotFound(new { message = "Cuenta no encontrada" });
+
+            var customerId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            if (account.CustomerId != customerId)
+                return Forbid();
+
+            var transactionsQuery = new GetTransactionHistoryQuery
             {
                 AccountId = id,
                 StartDate = startDate,
                 EndDate = endDate
             };
 
-            var transactions = await _mediator.Send(query);
+            var transactions = await _mediator.Send(transactionsQuery);
             return Ok(transactions);
         }
         catch (Exception ex)

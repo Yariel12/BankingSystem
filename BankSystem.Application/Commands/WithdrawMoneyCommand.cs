@@ -8,6 +8,7 @@ namespace BankSystem.Application.Commands
     {
         public Guid AccountId { get; set; }
         public decimal Amount { get; set; }
-        public string Description { get; set; } = "Retiro";
+        public string Description { get; set; } = string.Empty;
+        public Guid RequestingCustomerId { get; set; } 
     }
 }
